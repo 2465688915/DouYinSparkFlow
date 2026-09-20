@@ -207,6 +207,7 @@ def do_user_task(browser, username, cookies, targets):
         retries=config["taskRetryTimes"],
         delay=5,
         url="https://www.douyin.com/chat",
+        wait_until="domcontentloaded",
     )
 
     time.sleep(5)  # 等待5秒让过可能存在的弹窗
