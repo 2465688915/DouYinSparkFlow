@@ -13,7 +13,7 @@ logger = setup_logger(level=config.get("logLevel", "Info"))
 CONVERSATION_ITEM_SELECTOR = ".conversationConversationItemwrapper"
 CONVERSATION_TITLE_SELECTOR = ".conversationConversationItemtitle"
 CONVERSATION_LIST_SELECTOR = ".conversationConversationListwrapper"
-CHAT_EDITOR_SELECTOR = ".messageEditorimChatEditorContainer"
+CHAT_EDITOR_SELECTOR = '.messageEditorinputArea[contenteditable="true"]'
 
 
 def retry_operation(name, operation, retries=3, delay=2, *args, **kwargs):
@@ -216,7 +216,8 @@ def do_user_task(browser, username, cookies, targets):
     # 生成器迭代出的是「选中的好友名」，不要用来覆盖 username（账号名），否则日志会串
     for friend in scroll_and_select_user(page, username, targets):
         logger.debug(f"账号 {username} 已选中好友 {friend} 发送消息")
-        # 等待聊天输入框元素加载完成，使用更稳定的属性选择器
+        # 使用实际可编辑的 contenteditable 元素。外层容器虽然能接收强制输入，
+        # 但在外层按 Enter 不会触发抖音的发送逻辑。
         chat_input_selector = CHAT_EDITOR_SELECTOR
         page.wait_for_selector(chat_input_selector, timeout=config["browserTimeout"])
         chat_input = page.locator(chat_input_selector)
@@ -225,20 +226,21 @@ def do_user_task(browser, username, cookies, targets):
         message = build_message()
         lines = message.split("\\n")
         for line in lines:
-            # force=True: 跳过 cloakbrowser 拟人化的「可操作性检查」。
-            # 开了 humanize 之后 type() 会先检查元素是否可编辑, 而抖音的输入框选择器
-            # (.messageEditorimChatEditorContainer) 指向的是外层容器, 检查会判定
-            # "element is not editable" 并抛 ElementNotEditableError。force=True 只跳过
-            # 这一步检查, 逐字输入 + 随机延时的拟人化节奏照常保留。
-            chat_input.type(line, force=True)
+            chat_input.type(line)
             # 如果不是最后一行，模拟 Shift+Enter 插入换行
             if line != lines[-1]:
                 chat_input.press("Shift+Enter", force=True)  # 模拟 Shift+Enter 插入换行
 
         logger.debug(f"账号 {username} 准备发送消息给好友 {friend}：\n\t{message}")
-        logger.debug(f"账号 {username} 给好友 {friend} 发送消息完成")
         # 模拟按下回车键发送消息
-        chat_input.press("Enter", force=True)
+        chat_input.press("Enter")
+        # 发送成功后编辑框会被清空；等待该状态再记录成功，避免日志误报。
+        page.wait_for_function(
+            "selector => !document.querySelector(selector)?.innerText.trim()",
+            arg=chat_input_selector,
+            timeout=config["browserTimeout"],
+        )
+        logger.info(f"账号 {username} 给好友 {friend} 发送消息成功")
         time.sleep(2)  # 发送完等待一会儿
 
     context.close()  # 任务完成后关闭上下文
