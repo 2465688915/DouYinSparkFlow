@@ -64,6 +64,11 @@ def scroll_and_select_user(page, username, targets):
     logger.debug(f"账号 {username} 开始查找目标好友列表")
     logger.debug(f"账号 {username} 目标好友列表: {targets}")
 
+    # 好友列表通过网络异步加载。先等首批会话出现，避免列表尚为空时
+    # 立即向下滚动，从而跳过排在顶部的目标好友。
+    logger.debug(f"账号 {username} 等待好友列表加载")
+    page.wait_for_selector(target_selector, timeout=config["browserTimeout"])
+
     found_targets = set()
     # [修改] 复制一份目标列表用于追踪进度
     remaining_targets = set(targets)
